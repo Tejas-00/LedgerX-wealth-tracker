@@ -1,0 +1,21 @@
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Environment & Secrets (NEVER COMMIT CREDENTIALS)
+.env
+.env.local
+.env.*.local
+
+# Java / Maven (Backend)
+backend/target/
+backend/.mvn/
+backend/mvnw.cmd
+
+# Node / Next.js (Frontend)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+*.log
