@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: LedgerX API
+  description: Multi-tenant, automated asset and liability manager.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local Spring Boot Server
+paths:
+  # --- PORTFOLIO MANAGEMENT ---
+  /portfolios:
+    get:
+      summary: Get all sub-portfolios for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: A list of portfolios with their aggregated totals in the user's base currency.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioSummary'
+    post:
+      summary: Create a new sub-portfolio (e.g., "Wedding Fund")
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePortfolioRequest'
+      responses:
+        '201':
+          description: Portfolio created.
+
+  # --- ASSET MANAGEMENT ---
+  /portfolios/{portfolioId}/assets:
+    post:
+      summary: Add a new asset or liability to a portfolio
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRequest'
+      responses:
+        '201':
+          description: Asset successfully tracked.
+
+  # --- TRANSACTION LEDGER (EVENT SOURCING) ---
+  /assets/{assetId}/transactions:
+    post:
+      summary: Record a buy, sell, or automated SIP event
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordTransactionRequest'
+      responses:
+        '201':
+          description: Transaction recorded. The Asset's current_quantity is recalculated based on this event.
+
+  # --- AGGREGATION & SYNC ---
+  /sync/market-data:
+    post:
+      summary: Trigger an on-demand market price refresh
+      description: Reaches out to public APIs to update unit prices. Triggered by Next.js on user login.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Prices successfully refreshed.
+
+  /sync/spendwise:
+    post:
+      summary: Ingest cash balances from SpendWise
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Latest bank balances synced.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT # Expected to be the Supabase Access Token
+      
+  schemas:
+    PortfolioSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        totalValueBaseCurrency:
+          type: number
+          format: double
+        currency:
+          type: string
+
+    CreatePortfolioRequest:
+      type: object
+      required:
+        - name
+        - currency
+      properties:
+        name:
+          type: string
+          example: "Long-term Crypto"
+        currency:
+          type: string
+          example: "USD"
+
+    CreateAssetRequest:
+      type: object
+      required:
+        - name
+        - type
+        - isLiability
+      properties:
+        name:
+          type: string
+          example: "Tesla Motors"
+        tickerSymbol:
+          type: string
+          example: "TSLA"
+        type:
+          type: string
+          enum: [STOCK, CRYPTO, REAL_ESTATE, CASH, LOAN, CUSTOM]
+        isLiability:
+          type: boolean
+          example: false
+        currency:
+          type: string
+          example: "USD"
+
+    RecordTransactionRequest:
+      type: object
+      required:
+        - type
+        - quantity
+        - priceAtTransaction
+      properties:
+        type:
+          type: string
+          enum: [BUY, SELL, DIVIDEND, SIP_AUTOMATION]
+        quantity:
+          type: number
+          format: double
+          example: 5.5
+        priceAtTransaction:
+          type: number
+          format: double
+          example: 185.20
