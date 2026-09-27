@@ -8,10 +8,10 @@
 		<version>4.0.7</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.wealth</groupId>
-	<artifactId>wealth-tracker</artifactId>
+	<groupId>com.ledgerx</groupId>
+	<artifactId>ledgerx</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
+	<name>LedgerX</name>
 	<description/>
 	<url/>
 	<licenses>

@@ -1,10 +1,10 @@
-package com.wealth;
+package com.ledgerx;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class WealthTrackerApplicationTests {
+class LedgerXApplicationTests {
 
 	@Test
 	void contextLoads() {

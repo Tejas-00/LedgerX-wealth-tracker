@@ -1,13 +1,13 @@
-package com.wealth;
+package com.ledgerx;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class WealthTrackerApplication {
+public class LedgerXApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(WealthTrackerApplication.class, args);
+		SpringApplication.run(LedgerXApplication.class, args);
 	}
 
 }
