@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: LedgerX
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://ep-broad-salad-azod5i47.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require}
+    username: ${DB_USERNAME:neondb_owner}
+    password: ${DB_PASSWORD:npg_vNqKrcWCJ3p5}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
