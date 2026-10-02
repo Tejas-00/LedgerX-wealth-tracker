@@ -201,6 +201,7 @@ Each phase has an exit gate. Do not proceed to production release if a security,
 
 ### Phase 1 — Foundation and architecture
 
+- **Progress:** Foundation implemented. `mvn clean verify` passes all 5 tests without Supabase credentials. Added Supabase JWT issuer/JWKS/audience validation, canonical UUID subject checks, typed `UserId` mapping, stateless default-deny security, Problem Details for authentication/authorization failures, server-generated trace IDs, a reusable PostgreSQL Testcontainers base, MVC security tests, and a GitHub Actions Maven verify workflow. Remaining: validate against real Supabase settings, add persistence integration tests when migrations exist, and add dependency/security/static-analysis gates.
 - Confirm package/module boundaries and add only dependencies required for security, testing, telemetry, and resilience; keep versions managed by the Spring Boot BOM.
 - Configure environments without secret fallbacks; separate local/test/staging/prod configuration and fail fast when required production settings are absent.
 - Add Spring Security JWT resource server, principal-to-`UserId` mapping, default-deny route policy, Problem Details handler, request correlation, and safe Actuator endpoints.
@@ -210,6 +211,7 @@ Each phase has an exit gate. Do not proceed to production release if a security,
 
 ### Phase 2 — Database and identity/portfolio APIs
 
+- **Progress:** Portfolio implementation is in place: the first Flyway migration, application-owned profiles, portfolios, expiring idempotency records, create/list use cases, JPA persistence adapter, and authenticated HTTP routes. `mvn clean verify` passes 16 tests; 2 PostgreSQL integration tests are skipped because Docker is unavailable. OpenAPI parsing and all 46 local references pass. Phase 2 remains open until PostgreSQL migration/idempotency/tenant-isolation tests run and the valuation summary is backed by actual asset/FX data.
 - Implement Flyway base/profile/portfolio schema, constraints, indexes, and JPA persistence adapters.
 - Implement portfolio domain/value types, create and list input ports, ownership-aware output ports, and query aggregation boundary using ADR-0001.
 - Implement `POST /api/v1/portfolios` and `GET /api/v1/portfolios` with the current DTO, Location, idempotency, validation, Problem Details, pagination only if specified, and contract tests.
