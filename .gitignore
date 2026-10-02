@@ -2,7 +2,7 @@
 .idea/
 .vscode/
 *.iml
-.docs/
+docs/
 
 # Environment & Secrets (NEVER COMMIT CREDENTIALS)
 .env
