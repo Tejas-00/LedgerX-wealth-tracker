@@ -7,7 +7,6 @@ servers:
   - url: http://localhost:8080/api/v1
     description: Local Spring Boot Server
 paths:
-  # --- PORTFOLIO MANAGEMENT ---
   /portfolios:
     get:
       summary: Get all sub-portfolios for the authenticated user
@@ -15,17 +14,23 @@ paths:
         - BearerAuth: []
       responses:
         '200':
-          description: A list of portfolios with their aggregated totals in the user's base currency.
+          description: User portfolios with valuation status in the user's base currency.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/PortfolioSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/ApiError'
     post:
-      summary: Create a new sub-portfolio (e.g., "Wedding Fund")
+      summary: Create a new sub-portfolio
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -35,8 +40,22 @@ paths:
       responses:
         '201':
           description: Portfolio created.
+          headers:
+            Location:
+              $ref: '#/components/headers/ResourceLocation'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedPortfolio'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/ApiError'
 
-  # --- ASSET MANAGEMENT ---
   /portfolios/{portfolioId}/assets:
     post:
       summary: Add a new asset or liability to a portfolio
@@ -49,6 +68,7 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -58,13 +78,37 @@ paths:
       responses:
         '201':
           description: Asset successfully tracked.
+          headers:
+            Location:
+              $ref: '#/components/headers/ResourceLocation'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedAsset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/ApiError'
 
-  # --- TRANSACTION LEDGER (EVENT SOURCING) ---
   /assets/{assetId}/transactions:
     post:
-      summary: Record a buy, sell, or automated SIP event
+      summary: Record a buy, sell, dividend, or automated SIP event
       security:
         - BearerAuth: []
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -73,76 +117,194 @@ paths:
               $ref: '#/components/schemas/RecordTransactionRequest'
       responses:
         '201':
-          description: Transaction recorded. The Asset's current_quantity is recalculated based on this event.
+          description: Transaction recorded. Unit holdings are updated atomically where applicable.
+          headers:
+            Location:
+              $ref: '#/components/headers/ResourceLocation'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/ApiError'
 
-  # --- AGGREGATION & SYNC ---
   /sync/market-data:
     post:
-      summary: Trigger an on-demand market price refresh
-      description: Reaches out to public APIs to update unit prices. Triggered by Next.js on user login.
+      summary: Queue a market price refresh for the authenticated user's assets
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
-        '200':
-          description: Prices successfully refreshed.
+        '202':
+          description: Refresh accepted for asynchronous processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/ApiError'
 
   /sync/spendwise:
     post:
-      summary: Ingest cash balances from SpendWise
+      summary: Queue a SpendWise balance synchronization
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
-        '200':
-          description: Latest bank balances synced.
+        '202':
+          description: Sync accepted for asynchronous processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/ApiError'
 
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT # Expected to be the Supabase Access Token
-      
+      bearerFormat: JWT
+      description: Supabase access token.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Unique key scoped to the authenticated user and operation. Replays the original
+        result for an identical request; reuse with a different request returns 409.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._~-]+$'
+  headers:
+    ResourceLocation:
+      description: Relative URI of the created resource.
+      schema:
+        type: string
+        format: uri-reference
+  responses:
+    ApiError:
+      description: RFC 9457 Problem Details response.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource not found or not visible to the authenticated user.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Idempotency-key or domain-state conflict.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: Request violates a domain invariant.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
   schemas:
     PortfolioSummary:
       type: object
+      required: [id, name, totalValueBaseCurrency, currency, valuationStatus]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+          minLength: 1
         totalValueBaseCurrency:
-          type: number
-          format: double
+          type: string
+          pattern: '^-?\d+(\.\d{1,8})?$'
+          description: >-
+            Decimal string, rounded HALF_EVEN to the base currency minor-unit exponent.
+            Null when valuation is incomplete or stale.
+          nullable: true
         currency:
           type: string
+          pattern: '^[A-Z]{3}$'
+        valuationStatus:
+          type: string
+          enum: [COMPLETE, INCOMPLETE, STALE]
+        valuationAsOf:
+          type: string
+          format: date-time
+          nullable: true
 
     CreatePortfolioRequest:
       type: object
-      required:
-        - name
-        - currency
+      required: [name, currency]
       properties:
         name:
           type: string
-          example: "Long-term Crypto"
+          minLength: 1
+          example: Long-term Crypto
         currency:
           type: string
-          example: "USD"
+          pattern: '^[A-Z]{3}$'
+          example: USD
+
+    CreatedPortfolio:
+      type: object
+      required: [id, name, currency, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        createdAt:
+          type: string
+          format: date-time
 
     CreateAssetRequest:
       type: object
-      required:
-        - name
-        - type
-        - isLiability
+      required: [name, type, isLiability]
       properties:
         name:
           type: string
-          example: "Tesla Motors"
+          minLength: 1
+          example: Tesla Motors
         tickerSymbol:
           type: string
-          example: "TSLA"
+          nullable: true
+          example: TSLA
         type:
           type: string
           enum: [STOCK, CRYPTO, REAL_ESTATE, CASH, LOAN, CUSTOM]
@@ -151,23 +313,154 @@ components:
           example: false
         currency:
           type: string
-          example: "USD"
+          pattern: '^[A-Z]{3}$'
+          description: Defaults to the parent portfolio's currency when omitted.
+          example: USD
+
+    CreatedAsset:
+      type: object
+      required: [id, portfolioId, name, type, isLiability, currency, currentQuantity, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        portfolioId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tickerSymbol:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [STOCK, CRYPTO, REAL_ESTATE, CASH, LOAN, CUSTOM]
+        isLiability:
+          type: boolean
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        currentQuantity:
+          type: string
+          pattern: '^\d+(\.\d{1,8})?$'
+          description: Exact decimal string; initially zero.
+        createdAt:
+          type: string
+          format: date-time
 
     RecordTransactionRequest:
+      oneOf:
+        - $ref: '#/components/schemas/UnitTransactionRequest'
+        - $ref: '#/components/schemas/DividendTransactionRequest'
+      discriminator:
+        propertyName: type
+        mapping:
+          BUY: '#/components/schemas/UnitTransactionRequest'
+          SELL: '#/components/schemas/UnitTransactionRequest'
+          SIP_AUTOMATION: '#/components/schemas/UnitTransactionRequest'
+          DIVIDEND: '#/components/schemas/DividendTransactionRequest'
+
+    UnitTransactionRequest:
       type: object
-      required:
-        - type
-        - quantity
-        - priceAtTransaction
+      required: [type, quantity, priceAtTransaction]
       properties:
+        type:
+          type: string
+          enum: [BUY, SELL, SIP_AUTOMATION]
+          description: >-
+            Type determines direction. Quantity must be a positive magnitude. SELL is rejected
+            if it would reduce holdings below zero. SIP_AUTOMATION is a purchase source.
+        quantity:
+          type: string
+          pattern: '^(?=.*[1-9])\d+(\.\d{1,8})?$'
+          description: Positive decimal magnitude with at most 8 fractional digits.
+          example: '5.5'
+        priceAtTransaction:
+          type: string
+          pattern: '^(?=.*[1-9])\d+(\.\d{1,8})?$'
+          description: Positive unit price in the asset's native currency.
+          example: '185.20'
+
+    DividendTransactionRequest:
+      type: object
+      required: [type, cashAmount, currency]
+      properties:
+        type:
+          type: string
+          enum: [DIVIDEND]
+          description: Cash-income event; it does not change instrument units.
+        cashAmount:
+          type: string
+          pattern: '^(?=.*[1-9])\d+(\.\d{1,8})?$'
+          description: Positive amount in the asset's native currency.
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: Must match the asset's native currency in API v1.
+
+    CreatedTransaction:
+      type: object
+      required: [id, assetId, type, occurredAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+          format: uuid
         type:
           type: string
           enum: [BUY, SELL, DIVIDEND, SIP_AUTOMATION]
         quantity:
-          type: number
-          format: double
-          example: 5.5
-        priceAtTransaction:
-          type: number
-          format: double
-          example: 185.20
+          type: string
+          pattern: '^\d+(\.\d{1,8})?$'
+          nullable: true
+        cashAmount:
+          type: string
+          pattern: '^\d+(\.\d{1,8})?$'
+          nullable: true
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        resultingQuantity:
+          type: string
+          pattern: '^\d+(\.\d{1,8})?$'
+          description: Unit projection after event; unchanged by DIVIDEND.
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    SyncAccepted:
+      type: object
+      required: [syncId, status]
+      properties:
+        syncId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED]
+
+    Problem:
+      type: object
+      required: [type, title, status, code, traceId]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+        traceId:
+          type: string

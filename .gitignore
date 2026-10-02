@@ -7,9 +7,13 @@
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!**/.env.example
 
 # Java / Maven (Backend)
 backend/target/
+**/target/
 backend/.mvn/
 backend/mvnw.cmd
 
